@@ -299,6 +299,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return compactionStrategyManager.getCompactionParams().asMap();
     }
 
+    public int getNextCompactionId()
+    {
+        return compactionStrategyManager.getNextId();
+    }
+
     public String getCompactionParametersJson()
     {
         return FBUtilities.json(getCompactionParameters());
@@ -1307,6 +1312,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             metric.topWritePartitionFrequency.addSample(key.getKey(), 1);
             if (metric.topWritePartitionSize.isEnabled()) // dont compute datasize if not needed
                 metric.topWritePartitionSize.addSample(key.getKey(), update.dataSize());
+            metric.bytesInserted.inc(update.dataSize());
             StorageHook.instance.reportWrite(metadata.id, update);
             metric.writeLatency.addNano(System.nanoTime() - start);
             // CASSANDRA-11117 - certain resolution paths on memtable put can result in very
@@ -1585,7 +1591,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
     public Set<SSTableReader> getLiveSSTables()
     {
-        return data.getView().liveSSTables();
+        return data.getLiveSSTables();
     }
 
     public Iterable<SSTableReader> getSSTables(SSTableSet sstableSet)
@@ -2697,6 +2703,21 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return count > 0 ? sum * 1.0 / count : 0;
     }
 
+    public double sstablePartitionReadLatency()
+    {
+        return metric == null ? 0 : metric.sstablePartitionReadLatency.get();
+    }
+
+    public double getCompactionLatencyPerKb()
+    {
+        return metric == null ? 0 : metric.compactionLatencyPerKb.get();
+    }
+
+    public double getFlushLatencyPerKb()
+    {
+        return metric == null ? 0 : metric.flushLatencyPerKb.get();
+    }
+
     public int getMeanRowCount()
     {
         long totalRows = 0;
@@ -2726,6 +2747,42 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public DecoratedKey decorateKey(ByteBuffer key)
     {
         return getPartitioner().decorateKey(key);
+    }
+
+    public double bloomFilterFpRatio()
+    {
+        return metric == null ? 0 : metric.bloomFilterFalseRatio.getValue();
+    }
+
+    public long getReadRequests()
+    {
+        return metric == null ? 0 : metric.readRequests.getCount();
+    }
+
+    public long getBytesInserted()
+    {
+        return metric == null ? 0 : metric.bytesInserted.getCount();
+    }
+
+    /**
+     * @return the write amplification (bytes flushed + bytes compacted / bytes flushed).
+     */
+    public double getWA()
+    {
+        if (metric == null)
+            return 0;
+
+        double bytesCompacted = metric.compactionBytesWritten.getCount();
+        double bytesFlushed = metric.bytesFlushed.getCount();
+        return bytesFlushed <= 0 ? 0 : (bytesFlushed + bytesCompacted) / bytesFlushed;
+    }
+
+    public double getFlushSize()
+    {
+        if (metric == null)
+            return 0;
+
+        return metric.flushSize.get();
     }
 
     /** true if this CFS contains secondary index data */
