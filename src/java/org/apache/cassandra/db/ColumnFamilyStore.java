@@ -238,6 +238,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
     private volatile boolean compactionSpaceCheck = true;
 
+    /** The local ranges are used by the {@link DiskBoundaryManager} to create the disk boundaries but can also be
+     * used independently. They are created lazily and invalidated whenever {@link this#invalidateLocalRangesAndDiskBoundaries()}
+     * is called.
+     */
+    private volatile SortedLocalRanges localRanges;
+
     @VisibleForTesting
     final DiskBoundaryManager diskBoundaryManager = new DiskBoundaryManager();
 
@@ -2575,20 +2581,32 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
     /**
      * used for tests - to be able to check things after a minor compaction
-     * @param waitForFutures if we should block until autocompaction is done
+     * @param waitForFuture if we should block until autocompaction is done
      */
     @VisibleForTesting
-    public void enableAutoCompaction(boolean waitForFutures)
+    public void enableAutoCompaction(boolean waitForFuture)
     {
         strategyContainer.enable();
-        List<Future<?>> futures = CompactionManager.instance.submitBackground(this);
-        if (waitForFutures)
-            FBUtilities.waitOnFutures(futures);
+        Future<?> future = CompactionManager.instance.submitBackground(this);
+        if (waitForFuture)
+            FBUtilities.waitOnFuture(future);
     }
 
     public boolean isAutoCompactionDisabled()
     {
         return !this.strategyContainer.isEnabled();
+    }
+
+    public SortedLocalRanges getLocalRanges()
+    {
+        synchronized (this)
+        {
+            if (localRanges != null && !localRanges.isOutOfDate())
+                return localRanges;
+
+            localRanges = SortedLocalRanges.create(this);
+            return localRanges;
+        }
     }
 
     /**
@@ -3005,8 +3023,14 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return diskBoundaryManager.getDiskBoundaries(this);
     }
 
-    public void invalidateDiskBoundaries()
+    public void invalidateLocalRangesAndDiskBoundaries()
     {
+        synchronized (this)
+        {
+            if (localRanges != null)
+                localRanges.invalidate();
+        }
+
         diskBoundaryManager.invalidate();
     }
 
