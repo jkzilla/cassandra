@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -116,6 +117,12 @@ public class SortedLocalRanges
         return new SortedLocalRanges(storageService, cfs, ringVersion, weightedRanges);
     }
 
+    @VisibleForTesting
+    public static SortedLocalRanges forTesting(ColumnFamilyStore cfs, List<Splitter.WeightedRange> ranges)
+    {
+        return new SortedLocalRanges(null, cfs, 0, ranges);
+    }
+
     /**
      * check if the given disk boundaries are out of date due not being set or to having too old diskVersion/ringVersion
      */
@@ -169,6 +176,20 @@ public class SortedLocalRanges
 
         logger.debug("Boundaries for {}.{}: {} ({} splits)", cfs.getKeyspaceName(), cfs.getTableName(), boundaries, boundaries.size());
         return boundaries.stream().map(b -> b.maxKeyBound()).collect(Collectors.toList());
+    }
+
+    /**
+     * Returns the intersection of this list with the given range.
+     */
+    public List<Splitter.WeightedRange> subrange(Range<Token> range)
+    {
+        return ranges.stream()
+                     .map(r -> {
+                         Range<Token> subRange = r.range().intersectionNonWrapping(range);
+                         return subRange == null ? null : new Splitter.WeightedRange(r.weight(), subRange);
+                     })
+                     .filter(Objects::nonNull)
+                     .collect(Collectors.toList());
     }
 
     public boolean equals(Object o)
