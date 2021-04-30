@@ -106,6 +106,10 @@ public final class CreateTableStatement extends AlterSchemaStatement
             // Guardrail on table properties
             Guardrails.disallowedTableProperties.ensureAllowed(attrs.updatedProperties(), state);
 
+            // Guardrail on counter
+            if (rawColumns.values().stream().anyMatch(CQL3Type.Raw::isCounter))
+                Guardrails.counterEnabled.ensureEnabled(state);
+
             // Guardrail on columns per table
             Guardrails.columnsPerTable.guard(rawColumns.size(), tableName, state);
 

@@ -89,6 +89,10 @@ public abstract class Guardrails
                                                                                                     String::toLowerCase,
                                                                                                     "Table Properties");
 
+    public static final DisableFlag counterEnabled = new DisableFlag("counter",
+                                                                     () -> !config.counter_enabled,
+                                                                     "Counter");
+
     @SuppressWarnings("unchecked")
     public static final Predicates<InetAddressAndPort> replicaDiskUsage =
     (Predicates<InetAddressAndPort>) new Predicates<>("replica_disk_usage",
